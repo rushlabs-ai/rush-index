@@ -3,7 +3,7 @@
 
     python3 tools/check-crate-ages.py [--days 7]
 
-Reads Cargo.lock, asks the crates.io API when each locked version was published, and
+Reads Cargo.lock (standard library only, any Python 3), asks the crates.io API when each locked version was published, and
 fails if any is newer than the cutoff or has been yanked. Standard library only.
 """
 
@@ -14,7 +14,7 @@ import datetime as dt
 import json
 import sys
 import time
-import tomllib
+import re
 import urllib.request
 from pathlib import Path
 
@@ -33,10 +33,14 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=7)
     ap.add_argument("--lock", default=str(Path(__file__).resolve().parents[1] / "Cargo.lock"))
     args = ap.parse_args()
-    lock = tomllib.loads(Path(args.lock).read_text())
+    # Parse Cargo.lock by hand so this runs on any Python 3 (tomllib needs 3.11).
+    pkgs = []
+    for block in Path(args.lock).read_text().split("[[package]]")[1:]:
+        fields = dict(re.findall(r'^(name|version|source) = "([^"]*)"', block, re.M))
+        if fields.get("source", "").startswith("registry+"):
+            pkgs.append(fields)
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=args.days)
     bad = []
-    pkgs = [p for p in lock["package"] if p.get("source", "").startswith("registry+")]
     for i, p in enumerate(pkgs, 1):
         created, yanked = published(p["name"], p["version"])
         when = dt.datetime.fromisoformat(created.replace("Z", "+00:00"))
