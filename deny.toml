@@ -5,6 +5,11 @@ all-features = false
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+  # paste: "unmaintained" notice, not a vulnerability. A compile-time macro (no runtime code)
+  # pulled in by Hugging Face tokenizers. Reviewed 2026-11-08; revisit when tokenizers drops it.
+  { id = "RUSTSEC-2024-0436", reason = "unmaintained compile-time macro via tokenizers; no known vulnerability" },
+]
 
 [licenses]
 version = 2

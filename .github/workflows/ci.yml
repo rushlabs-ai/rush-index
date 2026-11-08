@@ -33,5 +33,6 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@c3bbe7e4e3f7baeee1a3dd9aec0a3b2aded580fb # v2.1.1
         with:
           command: check advisories licenses bans sources
+          arguments: --locked   # check the features we build with, not --all-features
       - name: Every locked crate is at least 7 days old
         run: python3 tools/check-crate-ages.py --days 7
