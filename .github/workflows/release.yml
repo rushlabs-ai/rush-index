@@ -1,0 +1,69 @@
+name: release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # Ubuntu 22.04 keeps the Linux binaries compatible with glibc 2.35 and newer.
+          - { os: ubuntu-22.04, target: linux_x86_64, exe: rush-index }
+          - { os: ubuntu-22.04-arm, target: linux_aarch64, exe: rush-index }
+          - { os: macos-latest, target: macos_arm64, exe: rush-index }
+          - { os: windows-2022, target: windows_x86_64, exe: rush-index.exe }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.98.1 --profile minimal && rustup default 1.98.1
+      - run: cargo test --locked --release
+      - run: cargo build --locked --release
+      - name: Package
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          name="rush-index_${TAG#v}_${{ matrix.target }}"
+          mkdir -p "pkg/$name" dist
+          cp "target/release/${{ matrix.exe }}" README.md LICENSE "pkg/$name/"
+          if [ "${{ runner.os }}" = Windows ]; then
+            (cd pkg && 7z a -tzip "../dist/$name.zip" "$name" >/dev/null)
+          else
+            tar -C pkg -czf "dist/$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write      # upload release assets
+      id-token: write      # build provenance
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber

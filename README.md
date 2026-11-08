@@ -20,7 +20,11 @@ $ rush-index search "receipt from the hardware store"       # illustrative outpu
 
 ## Install
 
-Build from source (Rust 1.88+): `cargo install --locked --git https://github.com/rushlabs-ai/rush-index`.
+Download a build for your platform from the [releases](https://github.com/rushlabs-ai/rush-index/releases)
+(Linux x86_64 and ARM64, macOS Apple silicon, Windows x86_64), check it against `SHA256SUMS`, and
+optionally verify its build provenance with `gh attestation verify <file> --repo rushlabs-ai/rush-index`.
+Or build from source (Rust 1.88+): `cargo install --locked --git https://github.com/rushlabs-ai/rush-index`.
+
 Then download the models and ONNX Runtime once:
 
 ```sh
