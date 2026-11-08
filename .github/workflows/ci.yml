@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         # Ubuntu 22.04 keeps the Linux binary compatible with glibc 2.35 and newer.
-        os: [ubuntu-22.04, macos-14, windows-2022]
+        os: [ubuntu-22.04, macos-latest, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
