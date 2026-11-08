@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ubuntu 22.04 keeps the Linux binary compatible with glibc 2.35 and newer.
+        os: [ubuntu-22.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.98.1 --profile minimal --component clippy && rustup default 1.98.1
+      - run: cargo build --locked --release
+      - run: cargo test --locked --release
+      - run: cargo clippy --locked --release -- -D warnings
+
+  supply-chain:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@c3bbe7e4e3f7baeee1a3dd9aec0a3b2aded580fb # v2.1.1
+        with:
+          command: check advisories licenses bans sources
+      - name: Every locked crate is at least 7 days old
+        run: python3 tools/check-crate-ages.py --days 7

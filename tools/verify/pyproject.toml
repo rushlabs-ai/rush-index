@@ -1,0 +1,14 @@
+# Inputs for tools/verify/requirements.txt (the Modal image that checks the ONNX models).
+[project]
+name = "rush-index-verify"
+version = "0"
+requires-python = ">=3.12"
+dependencies = ["onnxruntime==1.31.1", "transformers==5.22.1", "torch==2.14.1", "pillow==13.0.0"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

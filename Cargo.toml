@@ -1,0 +1,27 @@
+[package]
+name = "rush-index"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+description = "One local search over your documents and photos: hybrid text search plus image search by meaning, on CPU or NVIDIA GPU."
+repository = "https://github.com/rushlabs-ai/rush-index"
+publish = false
+
+# Exact versions only; Cargo.lock is committed and CI builds with --locked.
+[dependencies]
+anyhow = "=1.0.104"
+half = "=2.7.1"
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+lexopt = "=0.3.2"
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "api-31", "cuda", "half"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+sha2 = "=0.11.1"
+tantivy = { version = "=0.27.0", default-features = false, features = ["mmap", "stopwords", "stemmer", "lz4-compression"] }
+tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

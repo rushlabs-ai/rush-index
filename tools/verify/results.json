@@ -1,0 +1,289 @@
+{
+  "onnxruntime": "1.31.1",
+  "qwen3_tokenizer": {
+    "padding_side": "left",
+    "eos_appended": 151643,
+    "eos_token_id": 151645,
+    "pad_token_id": 151643
+  },
+  "qwen3/model_int8.onnx": {
+    "inputs": [
+      [
+        "input_ids",
+        "tensor(int64)",
+        [
+          "batch_size",
+          "sequence_length"
+        ]
+      ],
+      [
+        "attention_mask",
+        "tensor(int64)",
+        [
+          "batch_size",
+          "total_sequence_length"
+        ]
+      ],
+      [
+        "position_ids",
+        "tensor(int64)",
+        [
+          "batch_size",
+          "sequence_length"
+        ]
+      ],
+      "... plus 56 KV-cache tensors"
+    ],
+    "outputs": [
+      [
+        "last_hidden_state",
+        "tensor(float)",
+        [
+          "batch_size",
+          "sequence_length",
+          1024
+        ]
+      ],
+      "... plus 56 KV-cache tensors"
+    ],
+    "cosine_vs_reference": [
+      0.87994,
+      0.87063,
+      0.87062,
+      0.90967
+    ],
+    "query_doc_similarity": {
+      "relevant": 0.417,
+      "irrelevant": 0.146
+    },
+    "seconds_for_4_texts": 0.229
+  },
+  "qwen3/model.onnx": {
+    "inputs": [
+      [
+        "input_ids",
+        "tensor(int64)",
+        [
+          "batch_size",
+          "sequence_length"
+        ]
+      ],
+      [
+        "attention_mask",
+        "tensor(int64)",
+        [
+          "batch_size",
+          "total_sequence_length"
+        ]
+      ],
+      [
+        "position_ids",
+        "tensor(int64)",
+        [
+          "batch_size",
+          "sequence_length"
+        ]
+      ],
+      "... plus 56 KV-cache tensors"
+    ],
+    "outputs": [
+      [
+        "last_hidden_state",
+        "tensor(float)",
+        [
+          "batch_size",
+          "sequence_length",
+          1024
+        ]
+      ],
+      "... plus 56 KV-cache tensors"
+    ],
+    "cosine_vs_reference": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "query_doc_similarity": {
+      "relevant": 0.409,
+      "irrelevant": 0.084
+    },
+    "seconds_for_4_texts": 0.397
+  },
+  "siglip2_preprocessing_max_abs_diff": 0.0,
+  "siglip2_text_tokens": {
+    "first": [
+      235250,
+      2686,
+      576,
+      1378,
+      19493,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "keys": [
+      "input_ids"
+    ]
+  },
+  "siglip2_int8": {
+    "vision": {
+      "inputs": [
+        [
+          "pixel_values",
+          "tensor(float)",
+          [
+            "batch_size",
+            "num_channels",
+            "height",
+            "width"
+          ]
+        ]
+      ],
+      "outputs": [
+        [
+          "last_hidden_state",
+          "tensor(float)",
+          [
+            "floor(batch_size*floor(height/16)*floor(width/16)/196)",
+            196,
+            768
+          ]
+        ],
+        [
+          "pooler_output",
+          "tensor(float)",
+          [
+            "floor(batch_size*floor(height/16)*floor(width/16)/196)",
+            768
+          ]
+        ]
+      ]
+    },
+    "text": {
+      "inputs": [
+        [
+          "input_ids",
+          "tensor(int64)",
+          [
+            "batch_size",
+            "sequence_length"
+          ]
+        ]
+      ],
+      "outputs": [
+        [
+          "last_hidden_state",
+          "tensor(float)",
+          [
+            "batch_size",
+            "sequence_length",
+            768
+          ]
+        ],
+        [
+          "pooler_output",
+          "tensor(float)",
+          [
+            "batch_size",
+            768
+          ]
+        ]
+      ]
+    },
+    "image_cosine_vs_reference": [
+      0.6566,
+      0.72276,
+      0.89196
+    ],
+    "text_cosine_vs_reference": [
+      0.96556,
+      0.97709,
+      0.97424
+    ],
+    "zero_shot_correct": 3,
+    "seconds_for_3_images": 0.229
+  },
+  "siglip2_fp32": {
+    "vision": {
+      "inputs": [
+        [
+          "pixel_values",
+          "tensor(float)",
+          [
+            "batch_size",
+            "num_channels",
+            "height",
+            "width"
+          ]
+        ]
+      ],
+      "outputs": [
+        [
+          "last_hidden_state",
+          "tensor(float)",
+          [
+            "floor(batch_size*floor(height/16)*floor(width/16)/196)",
+            196,
+            768
+          ]
+        ],
+        [
+          "pooler_output",
+          "tensor(float)",
+          [
+            "floor(batch_size*floor(height/16)*floor(width/16)/196)",
+            768
+          ]
+        ]
+      ]
+    },
+    "text": {
+      "inputs": [
+        [
+          "input_ids",
+          "tensor(int64)",
+          [
+            "batch_size",
+            "sequence_length"
+          ]
+        ]
+      ],
+      "outputs": [
+        [
+          "last_hidden_state",
+          "tensor(float)",
+          [
+            "batch_size",
+            "sequence_length",
+            768
+          ]
+        ],
+        [
+          "pooler_output",
+          "tensor(float)",
+          [
+            "batch_size",
+            768
+          ]
+        ]
+      ]
+    },
+    "image_cosine_vs_reference": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "text_cosine_vs_reference": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "zero_shot_correct": 3,
+    "seconds_for_3_images": 0.378
+  }
+}

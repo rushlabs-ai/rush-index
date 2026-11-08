@@ -1,0 +1,42 @@
+{
+  "hardware": "4 CPU",
+  "corpus": {
+    "docs": 5183,
+    "photos": 500
+  },
+  "index_docs": {
+    "files": 5183,
+    "seconds": 1795.4,
+    "files_per_second": 2.89
+  },
+  "index_photos": {
+    "files": 500,
+    "seconds": 33.1,
+    "files_per_second": 15.08
+  },
+  "reindex_unchanged_seconds": 0.73,
+  "scifact_bm25": {
+    "ndcg@10": 0.6395,
+    "queries": 300,
+    "latency_ms_p50": 5
+  },
+  "scifact_dense": {
+    "ndcg@10": 0.6841,
+    "queries": 300,
+    "latency_ms_p50": 104
+  },
+  "scifact_hybrid": {
+    "ndcg@10": 0.694,
+    "queries": 300,
+    "latency_ms_p50": 107
+  },
+  "coco_caption_to_photo": {
+    "recall@1": 0.734,
+    "recall@5": 0.93,
+    "recall@10": 0.986
+  },
+  "mixed": {
+    "photos_in_top10_for_science_queries": 0.01,
+    "caption_queries_with_target_photo_in_top10": 0.82
+  }
+}
