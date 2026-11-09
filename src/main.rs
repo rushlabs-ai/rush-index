@@ -1,5 +1,6 @@
 //! rush-index: one local search over your documents and photos.
 
+mod docs;
 mod embed;
 mod files;
 mod models;
@@ -19,7 +20,7 @@ const USAGE: &str = "rush-index: search your documents and photos by meaning, lo
 
 Usage:
   rush-index fetch [--gpu]                 download the models (about 3.9 GB; 2.4 GB with --gpu)
-  rush-index index <folder>... [--gpu]     index text files and photos (re-run to update)
+  rush-index index <folder>... [--gpu]     index documents and photos (re-run to update)
   rush-index search <query> [-k N]         search documents and photos together
   rush-index similar <file> [-k N]         find documents or photos like this one
   rush-index status                        what is indexed
@@ -172,6 +173,16 @@ fn index(a: &Args) -> Result<()> {
     for r in &roots {
         found.extend(files::walk(r));
     }
+    if !docs::pdftotext_available() {
+        let before = found.len();
+        found.retain(|f| !files::is_pdf(&f.path));
+        if found.len() < before {
+            eprintln!(
+                "Skipping {} PDF files: install Poppler's pdftotext to index them (Linux: poppler-utils, macOS: brew install poppler)",
+                before - found.len()
+            );
+        }
+    }
     let mut new = Store {
         meta: Meta {
             version: store::VERSION,
@@ -227,10 +238,8 @@ fn index(a: &Args) -> Result<()> {
         let total = todo_text.len();
         for (n, f) in todo_text.iter().enumerate() {
             let key = f.path.display().to_string();
-            if let Some(text) = files::read_text(&f.path) {
-                for (line, body) in files::chunk(&text) {
-                    pending.push(Chunk { path: key.clone(), line, text: body });
-                }
+            for (line, body) in files::read_chunks(&f.path) {
+                pending.push(Chunk { path: key.clone(), line, text: body });
             }
             new.meta.files.insert(key, f.state);
             if pending.len() >= 256 || n + 1 == total {
@@ -371,6 +380,7 @@ impl<'a> Searcher<'a> {
 fn hit_json(h: &Hit) -> serde_json::Value {
     serde_json::json!({
         "type": h.kind, "path": h.path, "line": h.line, "snippet": h.snippet,
+        "page": if files::is_pdf(std::path::Path::new(&h.path)) { h.line } else { None },
         "score": h.score, "photo_probability": h.probability,
     })
 }
@@ -415,6 +425,9 @@ fn print_hits(query: &str, hits: &[Hit], json: bool) -> Result<()> {
                 Some(p) => println!("{:>2}. [photo] {}  (match {:.0}%)", i + 1, h.path, p * 100.0),
                 None => println!("{:>2}. [photo] {}", i + 1, h.path),
             },
+            _ if files::is_pdf(std::path::Path::new(&h.path)) => {
+                println!("{:>2}. {} (page {})\n    {}", i + 1, h.path, h.line.unwrap_or(1), h.snippet)
+            }
             _ => println!("{:>2}. {}:{}\n    {}", i + 1, h.path, h.line.unwrap_or(1), h.snippet),
         }
     }

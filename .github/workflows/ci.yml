@@ -21,6 +21,9 @@ jobs:
           persist-credentials: false
       - run: rustup toolchain install 1.98.1 --profile minimal --component clippy && rustup default 1.98.1
       - run: cargo build --locked --release
+      # Poppler's pdftotext from Ubuntu's signed archive, so the PDF test runs here (it skips elsewhere).
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - run: cargo test --locked --release
       - run: cargo clippy --locked --release -- -D warnings
 

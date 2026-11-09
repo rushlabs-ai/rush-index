@@ -10,8 +10,8 @@ $ rush-index search "receipt from the hardware store"       # illustrative outpu
  2. [photo] /home/me/Pictures/2026-03-02-receipt.jpg  (match 87%)
 ```
 
-- **Documents**: [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B) for meaning, plus
-  BM25 (tantivy) for exact words, fused with reciprocal rank fusion.
+- **Documents**: text files, PDFs and Word (.docx) files. [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+  for meaning, plus BM25 (tantivy) for exact words, fused with reciprocal rank fusion.
 - **Photos**: [SigLIP2](https://huggingface.co/google/siglip2-base-patch16-224) matches your words to the
   pictures themselves. A photo appears only when SigLIP2's calibrated match probability clears a
   threshold, so a science question does not return holiday snaps.
@@ -45,9 +45,18 @@ rush-index similar ~/Pictures/IMG_2041.jpg
 rush-index search --batch queries.tsv --json   # many queries, models loaded once
 ```
 
-Text files (Markdown, plain text, code, CSV, HTML and more) are split into overlapping chunks
-of about 1,200 characters. Photos: JPEG, PNG and WebP. Hidden folders, `node_modules`, `target`
-and similar are skipped, and symlinks are never followed.
+Documents are split into overlapping chunks of about 1,200 characters:
+
+- **Text files**: Markdown, plain text, code, CSV, HTML and more.
+- **Word (.docx)**: read by Rush Index itself (body text; size-limited, no macros or embedded objects).
+- **PDF**: read with Poppler's `pdftotext` (Linux: `poppler-utils`; macOS: `brew install poppler`;
+  Windows: a Poppler build on your `PATH`). Results show the page number. Without `pdftotext`, PDFs
+  are skipped and picked up on a later run once it is installed. Scanned PDFs without a text layer
+  are not read (no OCR). `pdftotext` runs as a separate process with a 60-second limit per file;
+  keep Poppler updated through your system's packages, since it parses every PDF you index.
+
+Photos: JPEG, PNG and WebP. Hidden folders, `node_modules`, `target` and similar are skipped, and
+symlinks are never followed.
 
 ## How good is it?
 
