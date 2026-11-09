@@ -11,9 +11,12 @@ pub const TEXT_EXT: &[&str] = &[
     "html", "htm", "xml", "log", "py", "rs", "go", "js", "ts", "tsx", "jsx", "java", "kt", "c", "h", "cc", "cpp", "hpp",
     "cs", "rb", "php", "swift", "sh", "sql", "r", "lua", "scala", "dart",
 ];
+/// Documents read through a converter (see docs.rs). PDF needs Poppler's `pdftotext`.
+pub const DOC_EXT: &[&str] = &["pdf", "docx"];
 pub const IMAGE_EXT: &[&str] = &["jpg", "jpeg", "png", "webp"];
 const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", ".venv", "venv", "__pycache__", ".cache", "dist", "build"];
 const MAX_TEXT_BYTES: u64 = 8 << 20;
+const MAX_DOC_BYTES: u64 = 64 << 20;
 const MAX_IMAGE_BYTES: u64 = 40 << 20;
 const CHUNK_CHARS: usize = 1200;
 const OVERLAP_LINES: usize = 2;
@@ -30,7 +33,7 @@ pub struct Found {
     pub state: FileState,
 }
 
-fn ext_of(p: &Path) -> String {
+pub fn ext_of(p: &Path) -> String {
     p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
 }
 
@@ -53,7 +56,7 @@ pub fn walk(root: &Path) -> Vec<Found> {
                 continue;
             }
             let ext = ext_of(&path);
-            let kind = if TEXT_EXT.contains(&ext.as_str()) {
+            let kind = if TEXT_EXT.contains(&ext.as_str()) || DOC_EXT.contains(&ext.as_str()) {
                 Kind::Text
             } else if IMAGE_EXT.contains(&ext.as_str()) {
                 Kind::Image
@@ -61,7 +64,11 @@ pub fn walk(root: &Path) -> Vec<Found> {
                 continue;
             };
             let Ok(md) = e.metadata() else { continue };
-            let limit = if kind == Kind::Text { MAX_TEXT_BYTES } else { MAX_IMAGE_BYTES };
+            let limit = match kind {
+                Kind::Image => MAX_IMAGE_BYTES,
+                Kind::Text if DOC_EXT.contains(&ext.as_str()) => MAX_DOC_BYTES,
+                Kind::Text => MAX_TEXT_BYTES,
+            };
             if md.len() == 0 || md.len() > limit {
                 continue;
             }
@@ -97,6 +104,24 @@ pub fn chunk(text: &str) -> Vec<(u32, String)> {
         start = end.saturating_sub(OVERLAP_LINES).max(start + 1);
     }
     out
+}
+
+/// Chunks of any indexable text file. For PDFs the number is the page; otherwise the first line.
+pub fn read_chunks(path: &Path) -> Vec<(u32, String)> {
+    match ext_of(path).as_str() {
+        "pdf" => crate::docs::pdf_pages(path)
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .flat_map(|(page, text)| chunk(text).into_iter().map(move |(_, body)| (page as u32 + 1, body)))
+            .collect(),
+        "docx" => fs::read(path).ok().and_then(|b| crate::docs::docx_text(&b)).map(|t| chunk(&t)).unwrap_or_default(),
+        _ => read_text(path).map(|t| chunk(&t)).unwrap_or_default(),
+    }
+}
+
+pub fn is_pdf(path: &Path) -> bool {
+    ext_of(path) == "pdf"
 }
 
 pub fn read_text(path: &Path) -> Option<String> {
