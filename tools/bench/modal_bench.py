@@ -1,7 +1,7 @@
 """Benchmark and evaluate the rush-index binary on Modal: a 4-CPU container and an L4 GPU.
 
-    cargo build --release && modal run tools/bench/modal_bench.py            # both
-    modal run tools/bench/modal_bench.py --only cpu                          # one side
+    cargo build --release && modal run tools/bench/modal_bench.py            # CPU and GPU (CUDA)
+    modal run tools/bench/modal_bench.py --only cpu|gpu|trt                  # one run; trt = TensorRT
 
 Corpus, built inside the container:
   - documents: BEIR SciFact (5,183 scientific abstracts, CC BY-SA 4.0) as .txt files; its 300 test
@@ -11,7 +11,9 @@ Corpus, built inside the container:
   - mixed: the same index holds both, so we also count how often a photo leaks into a
     document query's top 10 (photos must clear SigLIP2's match probability to appear)
 
-Reports files/s while indexing and query latency. Results go to tools/bench/results-<cpu|gpu>.json.
+Reports files/s while indexing and query latency. Results go to tools/bench/results-<cpu|gpu|trt>.json.
+The TensorRT run first builds its engines from an empty cache on a small sample and reports that
+one-time cost separately.
 """
 
 from __future__ import annotations
@@ -43,11 +45,19 @@ cpu_image = (
     .add_local_file(BIN, "/usr/local/bin/rush-index")
 )
 # ONNX Runtime's CUDA 12 build needs the CUDA 12 runtime and cuDNN 9 on the machine.
-gpu_image = (
+gpu_base = (
     modal.Image.from_registry(
         "nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04@sha256:ac55d124da4882b497f732d8dfd9a702d5447a5f29d08d56da6f64f0a1eb34bc",
         add_python="3.12")
     .apt_install("curl", "ca-certificates")
+)
+gpu_image = gpu_base.add_local_file(BIN, "/usr/local/bin/rush-index")
+# TensorRT from NVIDIA's signed apt repository (already trusted by the CUDA image). ONNX Runtime
+# 1.31.1 is built against 10.14.1.48; we use 10.16.1.11, the newest 10.x, which fixes
+# CVE-2026-24188 (10.14 is affected). See the README for the two CVEs still open in 10.16.1.
+TRT = "10.16.1.11-1+cuda12.9"
+trt_image = (
+    gpu_base.apt_install(f"libnvinfer10={TRT}", f"libnvinfer-plugin10={TRT}", f"libnvonnxparsers10={TRT}")
     .add_local_file(BIN, "/usr/local/bin/rush-index")
 )
 
@@ -113,17 +123,33 @@ def batch(args: list[str], queries: dict[str, str], env: dict) -> list[dict]:
     return [json.loads(x) for x in out.splitlines() if x.strip()]
 
 
-def run(gpu: bool) -> dict:
+def run(gpu: bool, trt: bool = False) -> dict:
     volume.reload()
     meta = prepare()
     models = "/vol/models-gpu" if gpu else "/vol/models-cpu"
-    env = dict(os.environ, RUSH_INDEX_MODELS=models)
-    flag = ["--gpu"] if gpu else []
-    sh(["rush-index", "fetch", *flag], env=env)
-    report: dict = {"hardware": "L4 GPU" if gpu else "4 CPU", "corpus": {"docs": meta["docs"], "photos": meta["photos"]}}
+    # A fresh engine cache in the container, so the one-time build cost is measured every run.
+    env = dict(os.environ, RUSH_INDEX_MODELS=models, RUSH_INDEX_TRT_CACHE="/tmp/trt-cache")
+    flag = ["--trt"] if trt else ["--gpu"] if gpu else []
+    sh(["rush-index", "fetch", *(["--gpu"] if gpu else [])], env=env)
+    report: dict = {"hardware": ("L4 GPU, TensorRT" if trt else "L4 GPU") if gpu else "4 CPU",
+                    "corpus": {"docs": meta["docs"], "photos": meta["photos"]}}
     if gpu:
         report["nvidia_smi"] = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"],
                                               capture_output=True, text=True).stdout.strip()
+    if trt:
+        report["tensorrt"] = subprocess.run(["dpkg-query", "-W", "-f=${Version}", "libnvinfer10"],
+                                            capture_output=True, text=True).stdout.strip()
+        # Build the engines once on a small sample (64 documents, 64 photos and one query).
+        warm = Path("/tmp/warm")
+        for kind, n in (("docs", 64), ("photos", 64)):
+            (warm / kind).mkdir(parents=True, exist_ok=True)
+            for f in sorted(Path(f"/vol/corpus/{kind}").iterdir())[:n]:
+                (warm / kind / f.name).write_bytes(f.read_bytes())
+        t0 = time.time()
+        sh(["rush-index", "index", str(warm / "docs"), str(warm / "photos"), "--db", "/tmp/warmdb", *flag], env=env)
+        sh(["rush-index", "search", "engine warm-up", "--db", "/tmp/warmdb", *flag], env=env, capture_output=True)
+        report["engine_build_seconds"] = round(time.time() - t0, 1)
+        report["engine_cache_mb"] = round(sum(f.stat().st_size for f in Path("/tmp/trt-cache").rglob("*") if f.is_file()) / 1e6, 1)
     # One index: documents first, then photos added on top (documents are reused), each timed.
     db = "/tmp/db"
     t0 = time.time()
@@ -179,14 +205,21 @@ def bench_gpu() -> dict:
     return run(gpu=True)
 
 
+@app.function(image=trt_image, gpu="L4", cpu=4, memory=16384, volumes={"/vol": volume}, timeout=2 * 3600)
+def bench_trt() -> dict:
+    return run(gpu=True, trt=True)
+
+
 @app.local_entrypoint()
 def main(only: str = "") -> None:
-    print("corpus:", prepare_corpus.remote())  # once, before both benchmarks read it
+    print("corpus:", prepare_corpus.remote())  # once, before the benchmarks read it
     calls = {}
     if only in ("", "gpu"):
         calls["gpu"] = bench_gpu.spawn()
     if only in ("", "cpu"):
         calls["cpu"] = bench_cpu.spawn()
+    if only == "trt":
+        calls["trt"] = bench_trt.spawn()
     for name, call in calls.items():
         res = call.get()
         (HERE / f"results-{name}.json").write_text(json.dumps(res, indent=2))

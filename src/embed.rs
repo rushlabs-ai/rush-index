@@ -4,7 +4,7 @@
 //! - SigLIP2 base/224: images resized to 224x224 (bilinear), scaled to [0,1] and normalised
 //!   with mean 0.5 / std 0.5; text padded to 64 tokens. `pooler_output` is the embedding.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use half::f16;
@@ -30,19 +30,95 @@ pub fn environment(lib: &Path) -> Result<Environment> {
     builder.build().map_err(|e| anyhow!("starting ONNX Runtime: {e}"))
 }
 
-fn session(env: &Environment, path: &Path, threads: usize, gpu: bool) -> Result<Session> {
+/// Where inference runs. TensorRT falls back to CUDA for anything it cannot build.
+#[derive(Clone, Debug)]
+pub enum Accel {
+    Cpu,
+    Cuda,
+    /// TensorRT with its engine and timing caches in this folder.
+    TensorRt(PathBuf),
+}
+
+impl Accel {
+    pub fn gpu(&self) -> bool {
+        !matches!(self, Accel::Cpu)
+    }
+}
+
+/// Explicit TensorRT optimisation profile (min, opt, max shapes), so one engine covers every
+/// batch and length instead of being rebuilt whenever a new shape arrives.
+struct Profile {
+    min: String,
+    opt: String,
+    max: String,
+    /// Prefix for this model's cached engine files.
+    name: &'static str,
+}
+
+fn session(env: &Environment, path: &Path, threads: usize, accel: &Accel, profile: Option<Profile>) -> Result<Session> {
     let mut b = Session::builder(env).map_err(|e| anyhow!("{e}"))?;
-    if gpu {
-        // Fail loudly instead of silently running a "GPU" job on the CPU.
-        b = b
-            .with_execution_providers([ort::ep::CUDA::default().build().error_on_failure()])
-            .map_err(|e| anyhow!("CUDA could not be enabled ({e}). --gpu needs an NVIDIA driver, the CUDA 12 runtime and cuDNN 9 libraries on the library path"))?;
+    // Fail loudly instead of silently running a "GPU" job on the CPU.
+    let cuda = || ort::ep::CUDA::default().build().error_on_failure();
+    match accel {
+        Accel::Cpu => {}
+        Accel::Cuda => {
+            b = b
+                .with_execution_providers([cuda()])
+                .map_err(|e| anyhow!("CUDA could not be enabled ({e}). --gpu needs an NVIDIA driver, the CUDA 12 runtime and cuDNN 9 libraries on the library path"))?;
+        }
+        Accel::TensorRt(cache) => {
+            std::fs::create_dir_all(cache).with_context(|| format!("creating {}", cache.display()))?;
+            // Engines are loaded back from here: keep the folder private so nobody else on this
+            // machine can plant a crafted engine file (TensorRT deserialises it).
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(cache, std::fs::Permissions::from_mode(0o700))
+                    .with_context(|| format!("restricting {}", cache.display()))?;
+            }
+            let dir = cache.display().to_string();
+            let mut trt = ort::ep::TensorRT::default()
+                .with_fp16(true)
+                .with_engine_cache(true)
+                .with_engine_cache_path(&dir)
+                .with_timing_cache(true)
+                .with_timing_cache_path(&dir);
+            if let Some(p) = profile {
+                trt = trt
+                    .with_engine_cache_prefix(p.name)
+                    .with_profile_min_shapes(p.min)
+                    .with_profile_opt_shapes(p.opt)
+                    .with_profile_max_shapes(p.max);
+            }
+            b = b
+                .with_execution_providers([trt.build().error_on_failure(), cuda()])
+                .map_err(|e| anyhow!("TensorRT could not be enabled ({e}). --trt needs the TensorRT 10 libraries (libnvinfer) in addition to CUDA 12 and cuDNN 9"))?;
+        }
     }
     b = b.with_optimization_level(GraphOptimizationLevel::Level3).map_err(|e| anyhow!("{e}"))?;
     if threads > 0 {
         b = b.with_intra_threads(threads).map_err(|e| anyhow!("{e}"))?;
     }
     b.commit_from_file(path).map_err(|e| anyhow!("loading {}: {e}", path.display()))
+}
+
+/// Qwen3-Embedding shapes: [batch, tokens] for the token inputs and an empty KV cache per layer.
+fn qwen_profile(batch: usize) -> Profile {
+    let shapes = |b: usize, t: usize| {
+        let mut v: Vec<String> = ["input_ids", "attention_mask", "position_ids"].iter().map(|n| format!("{n}:{b}x{t}")).collect();
+        for layer in 0..QWEN_LAYERS {
+            for kind in ["key", "value"] {
+                v.push(format!("past_key_values.{layer}.{kind}:{b}x{QWEN_KV_HEADS}x0x{QWEN_HEAD_DIM}"));
+            }
+        }
+        v.join(",")
+    };
+    Profile { min: shapes(1, 1), opt: shapes(batch, 256), max: shapes(batch, QWEN_MAX_TOKENS), name: "qwen3" }
+}
+
+fn siglip_vision_profile(batch: usize) -> Profile {
+    let s = |b: usize| format!("pixel_values:{b}x3x{SIGLIP_SIZE}x{SIGLIP_SIZE}");
+    Profile { min: s(1), opt: s(batch), max: s(batch), name: "siglip2_vision" }
 }
 
 fn only(output: &str) -> Result<RunOptions<HasSelectedOutputs>> {
@@ -82,9 +158,14 @@ pub struct TextEmbedder {
 }
 
 impl TextEmbedder {
-    pub fn load(env: &Environment, dir: &Path, gpu: bool, threads: usize) -> Result<Self> {
+    pub fn load(env: &Environment, dir: &Path, accel: &Accel, threads: usize) -> Result<Self> {
+        // The Qwen3-Embedding export uses ONNX Runtime's fused operators (SimplifiedLayerNormalization,
+        // MultiHeadAttention), which TensorRT cannot build: documents stay on CUDA under --trt.
+        let accel = if matches!(accel, Accel::TensorRt(_)) { &Accel::Cuda } else { accel };
+        let gpu = accel.gpu();
+        let batch = if gpu { 64 } else { 8 };
         let model = if gpu { "qwen3/model_fp16.onnx" } else { "qwen3/model.onnx" };
-        let session = session(env, &dir.join(model), threads, gpu)?;
+        let session = session(env, &dir.join(model), threads, accel, Some(qwen_profile(batch)))?;
         let kv = session.inputs().iter().filter(|i| i.name().starts_with("past_key_values")).count();
         if kv != QWEN_LAYERS * 2 {
             bail!("unexpected Qwen3-Embedding export: {kv} cache inputs");
@@ -93,7 +174,7 @@ impl TextEmbedder {
         let mut tok = Tokenizer::from_file(dir.join("qwen3/tokenizer.json")).map_err(|e| anyhow!("{e}"))?;
         tok.with_truncation(Some(tokenizers::TruncationParams { max_length: QWEN_MAX_TOKENS, ..Default::default() }))
             .map_err(|e| anyhow!("{e}"))?;
-        Ok(Self { session, tok, kv_f16, run: only("last_hidden_state")?, batch: if gpu { 64 } else { 8 } })
+        Ok(Self { session, tok, kv_f16, run: only("last_hidden_state")?, batch })
     }
 
     /// Embeddings for documents (`query = false`) or search queries, in input order.
@@ -168,14 +249,17 @@ pub struct ImageEmbedder {
 }
 
 impl ImageEmbedder {
-    pub fn load(env: &Environment, dir: &Path, gpu: bool, threads: usize) -> Result<Self> {
+    pub fn load(env: &Environment, dir: &Path, accel: &Accel, threads: usize) -> Result<Self> {
+        let gpu = accel.gpu();
+        let batch = if gpu { 64 } else { 8 };
         let (v, t) = if gpu {
             ("siglip2/vision_model_fp16.onnx", "siglip2/text_model_fp16.onnx")
         } else {
             ("siglip2/vision_model.onnx", "siglip2/text_model.onnx")
         };
-        let vision = session(env, &dir.join(v), threads, gpu)?;
-        let text = session(env, &dir.join(t), threads, gpu)?;
+        let vision = session(env, &dir.join(v), threads, accel, Some(siglip_vision_profile(batch)))?;
+        // The text tower always sees one query of 64 tokens: a single implicit profile suffices.
+        let text = session(env, &dir.join(t), threads, accel, None)?;
         let f16_in = matches!(precision_of(&vision, "pixel_values"), Precision::F16);
         let mut tok = Tokenizer::from_file(dir.join("siglip2/tokenizer.json")).map_err(|e| anyhow!("{e}"))?;
         tok.with_truncation(Some(tokenizers::TruncationParams { max_length: SIGLIP_TEXT_LEN, ..Default::default() }))
@@ -186,7 +270,7 @@ impl ImageEmbedder {
             pad_token: "<pad>".into(),
             ..Default::default()
         }));
-        Ok(Self { vision, text, tok, f16_in, run: only("pooler_output")?, batch: if gpu { 64 } else { 8 } })
+        Ok(Self { vision, text, tok, f16_in, run: only("pooler_output")?, batch })
     }
 
     /// Decode and preprocess one image into a CHW float buffer.

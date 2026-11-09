@@ -1,0 +1,46 @@
+{
+  "hardware": "L4 GPU, TensorRT",
+  "corpus": {
+    "docs": 5183,
+    "photos": 500
+  },
+  "nvidia_smi": "NVIDIA L4, 610.57.04",
+  "tensorrt": "10.16.1.11-1+cuda12.9",
+  "engine_build_seconds": 123.8,
+  "engine_cache_mb": 759.1,
+  "index_docs": {
+    "files": 5183,
+    "seconds": 121.6,
+    "files_per_second": 42.64
+  },
+  "index_photos": {
+    "files": 500,
+    "seconds": 11.7,
+    "files_per_second": 42.58
+  },
+  "reindex_unchanged_seconds": 0.74,
+  "scifact_bm25": {
+    "ndcg@10": 0.6395,
+    "queries": 300,
+    "latency_ms_p50": 5
+  },
+  "scifact_dense": {
+    "ndcg@10": 0.6839,
+    "queries": 300,
+    "latency_ms_p50": 39
+  },
+  "scifact_hybrid": {
+    "ndcg@10": 0.6948,
+    "queries": 300,
+    "latency_ms_p50": 44
+  },
+  "coco_caption_to_photo": {
+    "recall@1": 0.674,
+    "recall@5": 0.896,
+    "recall@10": 0.962
+  },
+  "mixed": {
+    "photos_in_top10_for_science_queries": 0.0,
+    "caption_queries_with_target_photo_in_top10": 0.44
+  }
+}

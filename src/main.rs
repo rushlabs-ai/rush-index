@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
-use embed::{IMAGE_DIM, ImageEmbedder, TEXT_DIM, TextEmbedder};
+use embed::{Accel, IMAGE_DIM, ImageEmbedder, TEXT_DIM, TextEmbedder};
 use files::Kind;
 use store::{Chunk, Meta, Photo, Store};
 
@@ -29,6 +29,8 @@ Options:
   --db <dir>          index location (default: $RUSH_INDEX_DB or ~/.local/share/rush-index/default)
   --models <dir>      model location (default: $RUSH_INDEX_MODELS or ~/.cache/rush-index/models)
   --gpu               use an NVIDIA GPU (CUDA 12) with the fp16 models
+  --trt               use NVIDIA TensorRT on the GPU (implies --gpu; needs TensorRT 10). Engines are
+                      built on first use and cached ($RUSH_INDEX_TRT_CACHE or <models>/trt-cache)
   --threads <n>       CPU threads for inference (default: all)
   -k <n>              number of results (default 10)
   --docs | --photos   only documents, or only photos
@@ -45,6 +47,7 @@ struct Args {
     db: Option<PathBuf>,
     models: Option<PathBuf>,
     gpu: bool,
+    trt: bool,
     threads: usize,
     k: usize,
     docs_only: bool,
@@ -64,6 +67,10 @@ fn parse() -> Result<Args> {
             Long("db") => a.db = Some(p.value()?.into()),
             Long("models") => a.models = Some(p.value()?.into()),
             Long("gpu") => a.gpu = true,
+            Long("trt") => {
+                a.trt = true;
+                a.gpu = true;
+            }
             Long("threads") => a.threads = p.value()?.parse()?,
             Short('k') => a.k = p.value()?.parse()?,
             Long("docs") => a.docs_only = true,
@@ -138,7 +145,7 @@ fn run() -> Result<()> {
 struct Engines {
     env: ort::environment::Environment,
     models: PathBuf,
-    gpu: bool,
+    accel: Accel,
     threads: usize,
 }
 
@@ -147,13 +154,20 @@ impl Engines {
         let dir = models_dir(a);
         models::require(&dir, a.gpu)?;
         let lib = models::runtime_library(&dir, a.gpu)?;
-        Ok(Self { env: embed::environment(&lib)?, models: dir, gpu: a.gpu, threads: threads(a) })
+        let accel = if a.trt {
+            Accel::TensorRt(std::env::var_os("RUSH_INDEX_TRT_CACHE").map(PathBuf::from).unwrap_or_else(|| dir.join("trt-cache")))
+        } else if a.gpu {
+            Accel::Cuda
+        } else {
+            Accel::Cpu
+        };
+        Ok(Self { env: embed::environment(&lib)?, models: dir, accel, threads: threads(a) })
     }
     fn text(&self) -> Result<TextEmbedder> {
-        TextEmbedder::load(&self.env, &self.models, self.gpu, self.threads)
+        TextEmbedder::load(&self.env, &self.models, &self.accel, self.threads)
     }
     fn image(&self) -> Result<ImageEmbedder> {
-        ImageEmbedder::load(&self.env, &self.models, self.gpu, self.threads)
+        ImageEmbedder::load(&self.env, &self.models, &self.accel, self.threads)
     }
 }
 
