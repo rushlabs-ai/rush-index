@@ -69,7 +69,7 @@ Latest run, on Rush Index 0.1.0 built from source (`tools/bench/results-*.json`)
 
 | | 4-CPU container | NVIDIA L4 |
 |---|---|---|
-| Index 5,183 documents (8,682 chunks) | 2.9 files/s (30 min) | **48 files/s** (1.8 min) |
+| Index 5,183 documents | 2.9 files/s (30 min) | **48 files/s** (1.8 min) |
 | Index 500 photos | 15 photos/s | 70 photos/s (incl. model load) |
 | Re-index with nothing changed | 0.7 s | 0.7 s |
 | Search latency, hybrid, models loaded (p50) | 107 ms | 44 ms |
