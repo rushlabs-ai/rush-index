@@ -60,11 +60,12 @@ symlinks are never followed.
 
 ## How good is it?
 
-`tools/bench/modal_bench.py` runs the release binary on a 4-CPU container and on an NVIDIA L4,
-on public data: **BEIR SciFact** (5,183 scientific abstracts, 300 test questions with graded
-relevance) and **500 COCO photos** searched by their human-written captions.
+`tools/bench/modal_bench.py` runs a local release build (`cargo build --release`) on a 4-CPU
+container and on an NVIDIA L4, on public data: **BEIR SciFact** (5,183 scientific abstracts, 300
+test questions with graded relevance) and **500 COCO photos** searched by their human-written
+captions.
 
-Latest run (`tools/bench/results-*.json`):
+Latest run, on Rush Index 0.1.0 built from source (`tools/bench/results-*.json`):
 
 | | 4-CPU container | NVIDIA L4 |
 |---|---|---|
