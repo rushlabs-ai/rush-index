@@ -18,7 +18,7 @@ import re
 import urllib.request
 from pathlib import Path
 
-UA = {"User-Agent": "rush-index supply-chain check (admin@rushlabs.ai)"}
+UA = {"User-Agent": "rush-index supply-chain check (vayun@rushlabs.ai)"}
 
 
 def published(name: str, version: str) -> tuple[str, bool]:
