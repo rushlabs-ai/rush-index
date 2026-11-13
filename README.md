@@ -1,5 +1,7 @@
 # Rush Index
 
+[![CI](https://github.com/rushlabs-ai/rush-index/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rushlabs-ai/rush-index/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/rushlabs-ai/rush-index)](https://github.com/rushlabs-ai/rush-index/releases/latest) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/rushlabs-ai/rush-index/blob/main/LICENSE)
+
 **One local search over your documents and photos.** Type what you are looking for and get the
 matching text files and photos together, ranked by meaning, without uploading anything.
 
@@ -48,12 +50,12 @@ rush-index search --batch queries.tsv --json   # many queries, models loaded onc
 Documents are split into overlapping chunks of about 1,200 characters:
 
 - **Text files**: Markdown, plain text, code, CSV, HTML and more.
-- **Word (.docx)**: read by Rush Index itself (body text; size-limited, no macros or embedded objects).
-- **PDF**: read with Poppler's `pdftotext` (Linux: `poppler-utils`; macOS: `brew install poppler`;
+- **Word (.docx)**: read by Rush Index itself (body text only, size-limited, no macros or embedded objects).
+- **PDF**: read with Poppler's `pdftotext` (Linux: `poppler-utils`, macOS: `brew install poppler`,
   Windows: a Poppler build on your `PATH`). Results show the page number. Without `pdftotext`, PDFs
   are skipped and picked up on a later run once it is installed. Scanned PDFs without a text layer
-  are not read (no OCR). `pdftotext` runs as a separate process with a 60-second limit per file;
-  keep Poppler updated through your system's packages, since it parses every PDF you index.
+  are not read (no OCR). `pdftotext` runs as a separate process with a 60-second limit per file.
+  Keep Poppler updated through your system's packages, since it parses every PDF you index.
 
 Photos: JPEG, PNG and WebP. Hidden folders, `node_modules`, `target` and similar are skipped, and
 symlinks are never followed.
@@ -85,7 +87,7 @@ Latest run, on Rush Index 0.1.0 built from source (`tools/bench/results-*.json`)
 
 Hybrid search beats either ranking alone, and the photo threshold keeps photos out of
 document-style questions while still surfacing them for photo-style ones. CPU and GPU give the
-same quality; the GPU is about 16x faster at indexing text.
+same quality, and the GPU is about 16x faster at indexing text.
 
 ## Accuracy of the model files
 
@@ -98,7 +100,7 @@ same quality; the GPU is about 16x faster at indexing text.
 | SigLIP2 base/224, text | fp32 / fp16 | 1.000 | 0.97 |
 
 The int8 files would halve the download but measurably change the results, so they are not used.
-Preprocessing in Rust matches the original pipeline exactly (pixel values identical; last-token
+Preprocessing in Rust matches the original pipeline exactly (identical pixel values, and last-token
 pooling with left padding for Qwen3).
 
 ## GPU
@@ -112,7 +114,7 @@ CPU). If CUDA cannot be initialised, ONNX Runtime falls back to the CPU.
 - Exact versions in `Cargo.toml`, `Cargo.lock` committed, builds with `--locked`.
 - `tools/check-crate-ages.py` fails CI if any locked crate is less than 7 days old or yanked.
 - `cargo deny` checks advisories (RustSec), licences (permissive only), and sources.
-- `ort` uses `load-dynamic`: no binaries are downloaded at build time; the runtime archive is
+- `ort` uses `load-dynamic`: no binaries are downloaded at build time, and the runtime archive is
   pinned by SHA-256 like the models.
 
 ## Licences
