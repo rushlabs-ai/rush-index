@@ -93,11 +93,15 @@ same quality, and the GPU is about 16x faster at indexing text.
 
 `tools/verify/verify_onnx.py` compares the ONNX files with the original PyTorch models.
 
-| Model | ONNX file used | Cosine vs original | int8 file (not used) |
-|---|---|---|---|
-| Qwen3-Embedding-0.6B | fp32 (CPU), fp16 (GPU) | 1.000 | 0.87–0.91 |
-| SigLIP2 base/224, image | fp32 / fp16 | 1.000 | 0.66–0.89 |
-| SigLIP2 base/224, text | fp32 / fp16 | 1.000 | 0.97 |
+| Model | CPU file (fp32) | int8 file (not used) |
+|---|---|---|
+| Qwen3-Embedding-0.6B | 1.000 | 0.87–0.91 |
+| SigLIP2 base/224, image | 1.000 | 0.66–0.89 |
+| SigLIP2 base/224, text | 1.000 | 0.97 |
+
+Values are cosine similarity against the original model. The GPU uses fp16 versions of the same
+files. This check does not cover them yet, but they give the same search quality on the benchmark
+above (SciFact nDCG@10 0.695 on GPU vs 0.694 on CPU).
 
 The int8 files would halve the download but measurably change the results, so they are not used.
 Preprocessing in Rust matches the original pipeline exactly (identical pixel values, and last-token
@@ -107,7 +111,7 @@ pooling with left padding for Qwen3).
 
 `--gpu` loads ONNX Runtime's CUDA 12 build and the fp16 models. It needs an NVIDIA driver plus
 the CUDA 12 runtime and cuDNN 9 libraries on the machine (the "single binary" promise holds on
-CPU). If CUDA cannot be initialised, ONNX Runtime falls back to the CPU.
+CPU). If CUDA cannot be initialised, Rush Index stops with an error that says which part is missing.
 
 ## Supply chain
 
